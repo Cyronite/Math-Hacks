@@ -44,8 +44,8 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
       mic.connect(shifter);
       setIsLive(true);
     } catch (e) {
-      console.error(e);
-      alert("Microphone access is required!");
+      console.error("Audio Start Error:", e);
+      alert("Microphone access is required or Audio Context failed to start.");
     }
   };
 
@@ -57,29 +57,44 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   };
 
   useEffect(() => {
+    // 1. If audio isn't ready, wait
     if (!pitchShiftRef.current || !isLive) return;
 
     const safeY = isNaN(yPosition as number) ? 0.5 : (yPosition as number);
     const invertedY = 1 - safeY;
 
-    // Map to Scale
+    // 2. Calculate Scale Index
     let index = Math.floor(invertedY * SCALE.length);
     if (index < 0) index = 0;
     if (index >= SCALE.length) index = SCALE.length - 1;
 
     const targetNote = SCALE[index];
 
-    // Only update if the note actually changed
+    // 3. Update Audio
     if (targetNote.val !== activeNote.val) {
         setActiveNote(targetNote);
         
-        (pitchShiftRef.current.pitch as any).rampTo(targetNote.val, 0.1);
+        const pitchSignal = pitchShiftRef.current.pitch;
+
+        try {
+            // @ts-ignore - Ignores the TS error, but we catch runtime errors below
+            if (pitchSignal.rampTo) {
+                 // @ts-ignore
+                pitchSignal.rampTo(targetNote.val, 0.1);
+            } else {
+                // Fallback: If rampTo doesn't exist, just set the value
+                pitchShiftRef.current.pitch = targetNote.val;
+            }
+        } catch (e) {
+            // if worst case, force the value so app doesn't crash
+            console.warn("Smoothing failed, snapping pitch instead.");
+            pitchShiftRef.current.pitch = targetNote.val;
+        }
     }
 
   }, [yPosition, isLive, activeNote]);
 
-  // If loading
-  if (!activeNote) return <div className="text-white">Loading...</div>;
+  if (!activeNote) return <div className="text-white">Loading Scale...</div>;
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full text-white p-4">
@@ -113,11 +128,17 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
         </div>
 
         {!isLive ? (
-          <button onClick={startProcessor} className="w-full py-4 bg-purple-600/20 border border-purple-500/50 hover:bg-purple-500 hover:text-black text-purple-400 rounded-2xl font-black uppercase tracking-widest transition-all">
+          <button 
+            onClick={startProcessor} 
+            className="w-full py-4 bg-purple-600/20 border border-purple-500/50 hover:bg-purple-500 hover:text-black text-purple-400 rounded-2xl font-black uppercase tracking-widest transition-all"
+          >
             Start Auto-Tune
           </button>
         ) : (
-          <button onClick={stopProcessor} className="w-full py-4 bg-red-600/20 border border-red-500/50 hover:bg-red-500 hover:text-black text-red-400 rounded-2xl font-black uppercase tracking-widest transition-all">
+          <button 
+            onClick={stopProcessor} 
+            className="w-full py-4 bg-red-600/20 border border-red-500/50 hover:bg-red-500 hover:text-black text-red-400 rounded-2xl font-black uppercase tracking-widest transition-all"
+          >
             Stop
           </button>
         )}
