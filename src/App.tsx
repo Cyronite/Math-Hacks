@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import './App.css';
 import AudioRecorder from './scripts/AudioRecorder';
 import HandTracker from './scripts/HandTracker';
