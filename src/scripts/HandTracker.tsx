@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
-const HandTracker = () => {
+interface HandTrackerProps {
+  onYChange: (y: number) => void;
+}
+
+const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [landmarker, setLandmarker] = useState<HandLandmarker | null>(null);
 
@@ -39,6 +43,8 @@ const HandTracker = () => {
       
       if (results.landmarks.length > 0) {
         console.log("Index Tip Y:", results.landmarks[0][8].y);
+        const indexTipY = results.landmarks[0][8].y; // Y position of the index fingertip
+        onYChange(indexTipY);
       }
     }
     requestAnimationFrame(predict);
