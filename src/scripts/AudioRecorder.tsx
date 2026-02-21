@@ -32,7 +32,7 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
       
       const shifter = new Tone.PitchShift({
         pitch: 0,
-        windowSize: 0.1, 
+        windowSize: 0.05, // make the robot voice sound cleaner
       }).toDestination(); 
       
       pitchShiftRef.current = shifter;
@@ -57,42 +57,27 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   };
 
   useEffect(() => {
-    // 1. If audio isn't ready, wait
     if (!pitchShiftRef.current || !isLive) return;
 
     const safeY = isNaN(yPosition as number) ? 0.5 : (yPosition as number);
     const invertedY = 1 - safeY;
 
-    // 2. Calculate Scale Index
     let index = Math.floor(invertedY * SCALE.length);
     if (index < 0) index = 0;
     if (index >= SCALE.length) index = SCALE.length - 1;
 
     const targetNote = SCALE[index];
 
-    // 3. Update Audio
-    if (targetNote.val !== activeNote.val) {
-        setActiveNote(targetNote);
-        
-        const pitchSignal = pitchShiftRef.current.pitch;
-
-        try {
-            // @ts-ignore - Ignores the TS error, but we catch runtime errors below
-            if (pitchSignal.rampTo) {
-                 // @ts-ignore
-                pitchSignal.rampTo(targetNote.val, 0.01);
-            } else {
-                // Fallback: If rampTo doesn't exist, just set the value
-                pitchShiftRef.current.pitch = targetNote.val;
-            }
-        } catch (e) {
-            // if worst case, force the value so app doesn't crash
-            console.warn("Smoothing failed, snapping pitch instead.");
-            pitchShiftRef.current.pitch = targetNote.val;
+    setActiveNote(prevNote => {
+        if (prevNote.val !== targetNote.val) {
+            // Apply the pitch shift directly! 
+            pitchShiftRef.current!.pitch = targetNote.val;
+            return targetNote;
         }
-    }
+        return prevNote;
+    });
 
-  }, [yPosition, isLive, activeNote]);
+  }, [yPosition, isLive]);
 
   if (!activeNote) return <div className="text-white">Loading Scale...</div>;
 

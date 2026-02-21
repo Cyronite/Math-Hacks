@@ -56,6 +56,7 @@ const PitchGame: React.FC = () => {
     const ctx = audioCtxRef.current;
     if (!ctx) return;
     
+    // Wake up context if the browser put it to sleep
     if (ctx.state === 'suspended') ctx.resume();
 
     const osc = ctx.createOscillator();
@@ -133,14 +134,28 @@ const PitchGame: React.FC = () => {
     const hz = autoCorrelate(buffer, audioCtxRef.current.sampleRate);
 
     if (hz > -1) {
-      setCurrentHz(hz);
-      const diff = Math.abs(hz - targetNote.hz);
-      
-      let calculatedScore = 100;
-      if (diff > 3) {
-        calculatedScore = Math.max(0, 100 - (diff - 3));
+      setCurrentHz(hz); // Show their actual raw pitch on screen
+
+      // Octave Folding: Shift their pitch to match the target's octave
+      let adjustedHz = hz;
+      const lowerBound = targetNote.hz * 0.707; // Half an octave down
+      const upperBound = targetNote.hz * 1.414; // Half an octave up
+
+      while (adjustedHz < lowerBound) adjustedHz *= 2;
+      while (adjustedHz > upperBound) adjustedHz /= 2;
+
+      // 100 cents = exactly 1 piano key (semitone) away
+      const centsOff = Math.abs(1200 * Math.log2(adjustedHz / targetNote.hz));
+
+      let calculatedScore = 0;
+      if (centsOff <= 15) {
+        // Give them a 15-cent "perfect" window. Singers naturally waver slightly!
+        calculatedScore = 100;
+      } else if (centsOff < 100) {
+        // Map the remaining 15-100 cents to a 0-100 score
+        calculatedScore = Math.max(0, 100 - (centsOff - 15));
       }
-      
+
       const finalScore = Math.round(calculatedScore);
       setScore(finalScore);
       setBestScore(prev => Math.max(prev, finalScore));
@@ -153,7 +168,7 @@ const PitchGame: React.FC = () => {
 
   const endRound = () => {
     setGameState('result');
-    // We ONLY stop the loop. We do NOT suspend the audio context anymore!
+    // We ONLY stop the loop. We do NOT suspend the audio context
     cancelAnimationFrame(reqFrameRef.current);
   };
 

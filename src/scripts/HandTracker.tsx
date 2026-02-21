@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
-const LERP_FACTOR = 0.5;
+// The smoothing factor. 0.1 = heavy/smooth, 0.9 = fast/twitchy
+const LERP_FACTOR = 0.06;
 
 interface HandTrackerProps {
   onYChange: (y: number) => void;
@@ -9,14 +10,11 @@ interface HandTrackerProps {
 
 const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  
-  // Store the model and timestamps in REFS
-  const landmarkerRef = useRef<HandLandmarker | null>(null);
-  const lastVideoTimeRef = useRef<number>(-1);
-  const lastY = useRef<number>(0.5);
-
   const [isTracking, setIsTracking] = useState(false);
-  const [isModelLoaded, setIsModelLoaded] = useState(false);
+  
+  const landmarkerRef = useRef<HandLandmarker | null>(null);
+  const lastY = useRef<number>(0.5);
+  const reqFrameRef = useRef<number>(0);
 
   useEffect(() => {
     const setupLandmarker = async () => {
@@ -32,11 +30,15 @@ const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
         numHands: 1,
       });
       
+      // Save it to the ref immediately
       landmarkerRef.current = handLandmarker;
-      setIsModelLoaded(true);
     };
 
     setupLandmarker();
+    
+    return () => {
+       cancelAnimationFrame(reqFrameRef.current);
+    }
   }, []);
 
   const startWebcam = async () => {
@@ -48,29 +50,23 @@ const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
     }
   };
 
-  const predict = async () => {
-    const video = videoRef.current;
-    const model = landmarkerRef.current;
+  const predict = () => {
+    if (landmarkerRef.current && videoRef.current) {
+      const startTimeMs = performance.now();
+      const results = landmarkerRef.current.detectForVideo(videoRef.current, startTimeMs);
+      
+      if (results.landmarks && results.landmarks.length > 0) { 
+        const rawY = results.landmarks[0][8].y; 
 
-    if (model && video) {
-      // Only process if it's a brand new video frame
-      if (lastVideoTimeRef.current !== video.currentTime) {
-        lastVideoTimeRef.current = video.currentTime;
-        
-        const startTimeMs = performance.now();
-        const results = model.detectForVideo(video, startTimeMs);
-        
-        if (results.landmarks.length > 0) { 
-          const rawY = results.landmarks[0][8].y; 
+        // LERPING  -> New = Old + (Target - Old) * Speed [smoothing hand coordinates]
+        const smoothedY = lastY.current + (rawY - lastY.current) * LERP_FACTOR;
+        lastY.current = smoothedY;
 
-          const smoothedY = lastY.current + (rawY - lastY.current) * LERP_FACTOR;
-          lastY.current = smoothedY;
-
-          onYChange(smoothedY);
-        }
+        onYChange(smoothedY);
       }
     }
-    requestAnimationFrame(predict);
+    
+    reqFrameRef.current = requestAnimationFrame(predict);
   };
 
   return (
@@ -88,14 +84,9 @@ const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
       {!isTracking && (
         <button 
           onClick={startWebcam}
-          disabled={!isModelLoaded}
-          className={`px-8 py-3 font-black uppercase tracking-widest rounded-xl transition-all ${
-            isModelLoaded 
-                ? "bg-cyan-600/20 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-500 hover:text-black" 
-                : "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed"
-          }`}
+          className="px-8 py-3 bg-cyan-600/20 text-cyan-400 border border-cyan-500/50 hover:bg-cyan-500 hover:text-black font-black uppercase tracking-widest rounded-xl transition-all"
         >
-          {isModelLoaded ? "Initialize Camera Link" : "Loading AI Core..."}
+          Initialize Camera Link
         </button>
       )}
     </div>
