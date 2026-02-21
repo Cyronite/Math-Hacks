@@ -12,7 +12,7 @@ const HandTracker = () => {
       );
       const handLandmarker = await HandLandmarker.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: "/hand_landmarker.task", // Path to your downloaded file
+          modelAssetPath: "/hand_landmarker.task", 
           delegate: "GPU",
         },
         runningMode: "VIDEO",
@@ -38,8 +38,6 @@ const HandTracker = () => {
       const results = landmarker.detectForVideo(videoRef.current, startTimeMs);
       
       if (results.landmarks.length > 0) {
-        // results.landmarks[0] is an array of 21 points
-        // Landmark 8 is the INDEX_FINGER_TIP
         console.log("Index Tip Y:", results.landmarks[0][8].y);
       }
     }
