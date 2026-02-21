@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as Tone from 'tone';
 
 interface PitchTrackerProps {
-  yPosition?: number;
+  yPosition?: number; 
 }
 
+// C Major Pentatonic Scale
 const SCALE = [
   { val: 12, label: "High C" },
   { val: 9, label: "A" },
@@ -32,7 +33,7 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
       
       const shifter = new Tone.PitchShift({
         pitch: 0,
-        windowSize: 0.05, 
+        windowSize: 0.05, // Keep this low for low latency
       }).toDestination(); 
       
       pitchShiftRef.current = shifter;
@@ -59,27 +60,25 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   useEffect(() => {
     if (!pitchShiftRef.current || !isLive) return;
 
-    // SAFETY CHECK: Ensure yPosition is a real number. If not, default to 0.5
+    // Safety Guard
     const safeY = isNaN(yPosition) ? 0.5 : yPosition;
-
-    // 1. Invert Y 
     const invertedY = 1 - safeY;
 
-    // 2. Map 0-1 to Scale Index
+    // Calculate Index
     let index = Math.floor(invertedY * SCALE.length);
-    
-    // SAFETY CHECK: Clamp index to bounds
     if (index < 0) index = 0;
     if (index >= SCALE.length) index = SCALE.length - 1;
 
     const targetNote = SCALE[index];
 
-    if (targetNote) {
-      setActiveNote(targetNote);
-      pitchShiftRef.current.pitch = targetNote.val;
+    // Only update if the note actually changed to save processing
+    if (targetNote.val !== activeNote.val) {
+        setActiveNote(targetNote);
+        // 0.1s is fast enough to feel responsive, but slow enough to remove the "pop"
+        pitchShiftRef.current.pitch = targetNote.val; 
     }
 
-  }, [yPosition, isLive]);
+  }, [yPosition, isLive, activeNote]);
 
   if (!activeNote) return <div className="text-white">Loading Scale...</div>;
 
@@ -103,8 +102,8 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
           {SCALE.map((note) => (
              <div 
                key={note.val}
-               className={`flex-1 w-full border-t border-slate-700/30 transition-colors duration-100 flex items-center justify-center
-                 ${note.val === activeNote.val ? "bg-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.8)] z-10" : "bg-transparent"}
+               className={`flex-1 w-full border-t border-slate-700/30 transition-all duration-300 flex items-center justify-center
+                 ${note.val === activeNote.val ? "bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.6)] z-10 scale-105" : "bg-transparent opacity-50"}
                `}
              >
                 <span className={`text-[10px] font-mono ${note.val === activeNote.val ? "text-white font-bold" : "text-slate-600"}`}>
