@@ -119,8 +119,9 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) =>
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-slate-950 text-white p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
+    // REMOVED min-h-screen to let the parent handle the height
+    <div className="flex flex-col items-center justify-center w-full h-full text-white p-4">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-[0_0_50px_rgba(34,197,94,0.1)]">
         <div className="flex justify-between items-center mb-8">
           <div className="flex flex-col">
             <span className="text-[10px] font-black text-cyan-500 uppercase tracking-widest">Studio Monitor</span>
@@ -141,33 +142,27 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) =>
             {pitch > 0 ? pitch : "---"}
             <span className="text-xl text-slate-700 ml-2">Hz</span>
           </div>
-          <div className="h-1.5 w-full bg-slate-800 rounded-full mt-4 overflow-hidden">
-             <div 
-               className="h-full bg-cyan-500 transition-all duration-150" 
-               style={{ width: `${Math.min((pitch / 1000) * 100, 100)}%`, opacity: pitch > 0 ? 1 : 0 }}
-             />
-          </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-1">
+        <div className="mt-4 flex flex-col gap-1 mb-8">
             <div className="flex justify-between text-[10px] font-bold text-cyan-500 uppercase">
                 <span>Hand Goal</span>
                 <span>{Math.round(targetFrequency)} Hz</span>
             </div>
-            <div className="h-1 w-full bg-slate-800 rounded-full relative">
-                {/* This is your voice */}
-                <div 
-                className="absolute h-full bg-cyan-500 transition-all duration-150" 
-                style={{ width: `${Math.min((pitch / 1000) * 100, 100)}%` }}
+            <div className="h-2 w-full bg-slate-800 rounded-full relative overflow-hidden border border-slate-700">
+                {/* This is your voice */}                <div 
+                  className="absolute h-full bg-green-500 transition-all duration-150" 
+                  style={{ width: `${Math.min((pitch / 1000) * 100, 100)}%` }}
                 />
                 {/* This is the hand position "target" */}
                 <div 
-                className="absolute h-full w-1 bg-white shadow-[0_0_8px_white]" 
-                style={{ left: `${Math.min((targetFrequency / 1000) * 100, 100)}%` }}
-                />
+                  className="absolute h-full w-2 bg-white shadow-[0_0_10px_white] z-10 transition-all duration-75" 
+                  style={{ left: `${Math.min((targetFrequency / 1000) * 100, 100)}%` }}
+                />``
             </div>
         </div>
 
+        {/* Sensitivity Controls */}
         <div className="space-y-6">
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
@@ -185,7 +180,7 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) =>
           <div className="flex items-center gap-4 bg-slate-950/50 p-3 rounded-xl border border-white/5">
              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div 
-                  className={`h-full transition-all ${volume > volumeThreshold ? 'bg-green-400 shadow-[0_0_10px_#4ade80]' : 'bg-slate-700'}`}
+                  className={`h-full transition-all ${volume > volumeThreshold ? 'bg-green-400' : 'bg-slate-700'}`}
                   style={{ width: `${Math.min(volume * 500, 100)}%` }}
                 />
              </div>
@@ -196,15 +191,12 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) =>
         {!audioCtxRef.current && (
           <button 
             onClick={startMic} 
-            className="mt-8 w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl font-black uppercase tracking-widest transition-all shadow-lg shadow-cyan-900/20"
+            className="mt-8 w-full py-4 bg-green-600/20 border border-green-500/50 hover:bg-green-500 hover:text-black text-green-400 rounded-2xl font-black uppercase tracking-widest transition-all"
           >
-            Power On Systems
+            Power On Audio Link
           </button>
         )}
       </div>
-      <p className="mt-6 text-slate-600 text-[10px] uppercase tracking-widest font-bold italic">
-        Warning: Use headphones to avoid audio feedback loops
-      </p>
     </div>
   );
 };
