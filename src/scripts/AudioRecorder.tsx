@@ -104,23 +104,11 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) =>
   // REACT TO HAND MOVEMENT (Frequency changes based on Y-pos)
   useEffect(() => {
     if (audioCtxRef.current && filterRef.current) {
-      const updateFrequency = (y: number) => {
-        const freq = 100 + (y / window.innerHeight) * 1000;
-        filterRef.current!.frequency.value = freq;
-      };
-
-      const handleMouseMove = (e: MouseEvent) => updateFrequency(e.clientY);
-      const handleTouchMove = (e: TouchEvent) => updateFrequency(e.touches[0].clientY);
-
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('touchmove', handleTouchMove);
-
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('touchmove', handleTouchMove);
-      };
+      if (filterRef.current) {
+        filterRef.current.frequency.setTargetAtTime(targetFrequency, audioCtxRef.current.currentTime, 0.05);
+      }
     }
-  }, []);
+  }, [targetFrequency]);
 
   const toggleMonitor = () => {
     if (monitorGainRef.current && audioCtxRef.current) {
@@ -159,6 +147,25 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) =>
                style={{ width: `${Math.min((pitch / 1000) * 100, 100)}%`, opacity: pitch > 0 ? 1 : 0 }}
              />
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-1">
+            <div className="flex justify-between text-[10px] font-bold text-cyan-500 uppercase">
+                <span>Hand Goal</span>
+                <span>{Math.round(targetFrequency)} Hz</span>
+            </div>
+            <div className="h-1 w-full bg-slate-800 rounded-full relative">
+                {/* This is your voice */}
+                <div 
+                className="absolute h-full bg-cyan-500 transition-all duration-150" 
+                style={{ width: `${Math.min((pitch / 1000) * 100, 100)}%` }}
+                />
+                {/* This is the hand position "target" */}
+                <div 
+                className="absolute h-full w-1 bg-white shadow-[0_0_8px_white]" 
+                style={{ left: `${Math.min((targetFrequency / 1000) * 100, 100)}%` }}
+                />
+            </div>
         </div>
 
         <div className="space-y-6">

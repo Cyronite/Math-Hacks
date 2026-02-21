@@ -18,6 +18,9 @@ const FrequencyLink: React.FC = () => {
         }} 
         />
       </div>
+      <div>
+        <PitchTracker targetFrequency={targetFrequency} />
+      </div>
     </div>
   )
 }
