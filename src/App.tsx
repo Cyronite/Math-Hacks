@@ -38,10 +38,6 @@ function App() {
                     <span className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-bold">Y</span>
                     Move hand UP/DOWN for <b className="text-white">Pitch</b>
                 </li>
-                <li className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">X</span>
-                    Move hand LEFT/RIGHT for <b className="text-white">Reverb</b>
-                </li>
             </ul>
         </div>
       </div>

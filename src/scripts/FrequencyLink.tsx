@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import HandTracker from './HandTracker';
-import PitchTracker from './AudioRecorder'; // We'll update this next
+import PitchTracker from './AudioRecorder';
 
 const FrequencyLink: React.FC = () => {
-  // Now we track SEMITONES (-12 to +12) instead of Hz
-  const [pitchShiftAmount, setPitchShiftAmount] = useState<number>(0); 
+  const [yPos, setYPos] = useState<number>(0.5); 
 
   return (
     <div className="flex w-full h-screen bg-slate-950 text-white overflow-hidden">
@@ -16,12 +15,7 @@ const FrequencyLink: React.FC = () => {
             <h2 className="text-[10px] font-black text-cyan-500 uppercase tracking-widest">Conductor Input</h2>
         </div>
         
-        <HandTracker onYChange={(y) => {
-          // y goes from 0 (top of screen) to 1 (bottom)
-          // We want top = +12 semitones (high pitch), bottom = -12 semitones (low pitch)
-          const shift = ((1 - y) * 24) - 12; 
-          setPitchShiftAmount(shift);
-        }} />
+        <HandTracker onYChange={setYPos} />
       </div>
 
       {/* RIGHT SIDE: Audio Output */}
@@ -31,7 +25,7 @@ const FrequencyLink: React.FC = () => {
             <h2 className="text-[10px] font-black text-purple-500 uppercase tracking-widest">Vocal Processor</h2>
         </div>
         
-        <PitchTracker pitchShiftAmount={pitchShiftAmount} />
+        <PitchTracker yPosition={yPos} />
       </div>
       
     </div>

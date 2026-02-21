@@ -2,48 +2,50 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as Tone from 'tone';
 
 interface PitchTrackerProps {
-  yPosition: number; // 0 (top) to 1 (bottom)
+  yPosition: number; // Expects 0 (top) to 1 (bottom)
 }
 
-// C Major Pentatonic Scale (The "safe" scale - everything sounds good)
-// Format: [SemitoneShift, Label]
+// C Major Pentatonic Scale
 const SCALE = [
-  { val: 12, label: "High C" },  // Top of screen
+  { val: 12, label: "High C" },
   { val: 9, label: "A" },
   { val: 7, label: "G" },
   { val: 4, label: "E" },
   { val: 2, label: "D" },
-  { val: 0, label: "Middle C" }, // Middle of screen
+  { val: 0, label: "Middle C" },
   { val: -3, label: "Low A" },
   { val: -5, label: "Low G" },
   { val: -8, label: "Low E" },
   { val: -10, label: "Low D" },
-  { val: -12, label: "Low C" }, // Bottom of screen
+  { val: -12, label: "Low C" },
 ];
 
 const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition }) => {
   const [isLive, setIsLive] = useState<boolean>(false);
-  const [activeNote, setActiveNote] = useState(SCALE[5]); // Default to Middle C
+  const [activeNote, setActiveNote] = useState(SCALE[5]); // Default Middle C
   
   const micRef = useRef<Tone.UserMedia | null>(null);
   const pitchShiftRef = useRef<Tone.PitchShift | null>(null);
 
   const startProcessor = async () => {
+    // 1. Initialize Tone Context
     await Tone.start();
 
-    // WindowSize: 0.05 is faster/more robotic, 0.1 is smoother/more natural
+    // 2. Create PitchShift ONLY (No Reverb)
     const shifter = new Tone.PitchShift({
       pitch: 0,
-      windowSize: 0.05, 
+      windowSize: 0.05, // Small window = robotic/fast, Large = smooth/sluggish
     }).toDestination(); 
     
     pitchShiftRef.current = shifter;
 
+    // 3. Open Mic
     const mic = new Tone.UserMedia();
     micRef.current = mic;
 
     try {
       await mic.open();
+      // 4. Connect Mic -> Shifter -> Speakers
       mic.connect(shifter);
       setIsLive(true);
     } catch (e) {
@@ -63,18 +65,20 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition }) => {
     if (!pitchShiftRef.current || !isLive) return;
 
     // --- QUANTIZATION LOGIC ---
-    // 1. Invert Y (because Y=0 is top, but we want high notes at top)
+    
+    // 1. Invert Y (Hand Top = 0 = High Note)
     const invertedY = 1 - yPosition;
 
-    // 2. Map 0-1 to an index in our SCALE array
-    // We maintain bounds so we don't crash the array
-    const maxIndex = SCALE.length - 1;
+    // 2. Map 0-1 to Scale Index
     let index = Math.floor(invertedY * SCALE.length);
+    
+    // Safety check to prevent crashing if index is out of bounds
     if (index < 0) index = 0;
-    if (index > maxIndex) index = maxIndex;
+    if (index >= SCALE.length) index = SCALE.length - 1;
 
     const targetNote = SCALE[index];
 
+    // 3. Apply Pitch
     setActiveNote(targetNote);
     pitchShiftRef.current.pitch = targetNote.val;
 
