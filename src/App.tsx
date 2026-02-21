@@ -1,70 +1,79 @@
-import React, { useState } from 'react';
-import AudioProcessor from './scripts/AudioRecorder'; // Renamed file
+import { useState } from 'react';
+import './App.css';
+import AudioRecorder from './scripts/AudioRecorder';
 import HandTracker from './scripts/HandTracker';
+import KeyboardTracker from './scripts/KeyboardTracker';
+import PitchGame from './scripts/PitchGame';
 
 function App() {
-  const [handX, setHandX] = useState(0.5);
-  const [handY, setHandY] = useState(0.5);
+  const [yPos, setYPos] = useState<number>(0.5);
+  const [mode, setMode] = useState<'synth' | 'game'>('synth');
+  const [inputMode, setInputMode] = useState<'camera' | 'keyboard'>('keyboard'); 
 
   return (
-    <div className="min-h-screen bg-slate-950 flex overflow-hidden">
+    <div className="min-h-screen bg-[#FDFCFB] text-slate-700 font-sans selection:bg-orange-100">
       
-      {/* BACKGROUND GRID (Visual Polish) */}
-      <div className="absolute inset-0 opacity-20 pointer-events-none" 
-           style={{ 
-             backgroundImage: 'linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)', 
-             backgroundSize: '40px 40px' 
-           }} 
-      />
-
-      {/* LEFT SIDE: CONTROLS & CAMERA */}
-      <div className="relative z-10 w-1/3 border-r border-slate-800 bg-slate-900/50 backdrop-blur-sm flex flex-col items-center justify-between p-8">
-        <div className="text-left w-full">
-            <h1 className="text-3xl font-black text-white tracking-tighter italic">
-                AETHER<span className="text-purple-500">VOX</span>
-            </h1>
-            <p className="text-slate-400 text-xs mt-2 uppercase tracking-widest">Gestural Audio Synthesizer</p>
+      {/* ELEGANT TOP NAVIGATION */}
+      <header className="fixed top-0 w-full z-50 px-8 py-6 flex justify-between items-center backdrop-blur-md bg-white/60 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+            <div className="w-6 h-6 bg-gradient-to-tr from-orange-300 to-rose-300 rounded-full shadow-sm" />
+            <h1 className="text-sm font-light tracking-[0.2em] uppercase text-slate-700"><span className="font-bold">Voca</span></h1>
         </div>
 
-        <HandTracker onHandMove={(x, y) => {
-            setHandX(x);
-            setHandY(y);
-        }} />
+        <nav className="flex gap-8">
+            <button 
+                onClick={() => setMode('synth')}
+                className={`text-[10px] uppercase tracking-[0.3em] transition-all pb-1 ${mode === 'synth' ? 'text-orange-500 font-bold border-b-2 border-orange-300' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                Synthesizer
+            </button>
+            <button 
+                onClick={() => setMode('game')}
+                className={`text-[10px] uppercase tracking-[0.3em] transition-all pb-1 ${mode === 'game' ? 'text-emerald-500 font-bold border-b-2 border-emerald-300' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                Training
+            </button>
+        </nav>
+      </header>
 
-        <div className="w-full p-6 bg-slate-800/50 rounded-xl border border-slate-700">
-            <h3 className="text-slate-400 text-[10px] uppercase font-bold mb-4">How to Play</h3>
-            <ul className="space-y-3 text-sm text-slate-300">
-                <li className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-bold">Y</span>
-                    Move hand UP/DOWN for <b className="text-white">Pitch</b>
-                </li>
-                <li className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs font-bold">X</span>
-                    Move hand LEFT/RIGHT for <b className="text-white">Reverb</b>
-                </li>
-            </ul>
-        </div>
-      </div>
+      <main className="pt-24 flex flex-col md:flex-row h-screen overflow-hidden">
+        
+        {/* LEFT: CONDUCTOR SPACE */}
+        <section className="w-full md:w-1/2 p-12 flex flex-col justify-center items-center relative">
+            {mode === 'synth' && (
+                <div className="absolute top-12 flex bg-slate-100 p-1 rounded-full shadow-inner">
+                    {['keyboard', 'camera'].map((m) => (
+                        <button
+                            key={m}
+                            onClick={() => setInputMode(m as any)}
+                            className={`px-6 py-2 rounded-full text-[9px] uppercase tracking-widest transition-all ${inputMode === m ? 'bg-white text-slate-700 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-500'}`}
+                        >
+                            {m}
+                        </button>
+                    ))}
+                </div>
+            )}
 
-      {/* RIGHT SIDE: INTERACTIVE CANVAS */}
-      <div className="relative z-10 w-2/3 flex items-center justify-center">
-         
-         <div 
-            className="absolute w-4 h-4 bg-white rounded-full shadow-[0_0_20px_white] pointer-events-none transition-all duration-75 ease-out"
-            style={{
-                left: `${(1 - handX) * 100}%`,
-                top: `${handY * 100}%`
-            }}
-         />
-         
-         {/* Crosshairs */}
-         <div className="absolute inset-0 pointer-events-none opacity-20">
-            <div className="absolute top-0 bottom-0 w-[1px] bg-cyan-500" style={{ left: `${(1-handX)*100}%` }}></div>
-            <div className="absolute left-0 right-0 h-[1px] bg-purple-500" style={{ top: `${handY*100}%` }}></div>
-         </div>
+            <div className="w-full max-w-lg transition-all duration-1000">
+                {mode === 'synth' ? (
+                    inputMode === 'camera' ? <HandTracker onYChange={setYPos} /> : <KeyboardTracker onYChange={setYPos} />
+                ) : (
+                    <div className="text-center space-y-4">
+                        <h3 className="text-3xl font-light text-slate-400 italic">Warm up your voice.</h3>
+                        <p className="text-xs text-slate-400 uppercase tracking-widest">No hands required for training mode.</p>
+                    </div>
+                )}
+            </div>
+        </section>
 
-         <AudioProcessor x={1-handX} y={handY} />
-      </div>
+        {/* RIGHT: OUTPUT SPACE */}
+        <section className="w-full md:w-1/2 p-12 bg-[#F8F7F5] flex flex-col justify-center items-center border-l border-slate-100">
+            <div className="w-full max-w-md transition-all duration-1000">
+                {mode === 'synth' ? <AudioRecorder yPosition={yPos} /> : <PitchGame />}
+            </div>
+        </section>
+
+      </main>
     </div>
   );
 }
