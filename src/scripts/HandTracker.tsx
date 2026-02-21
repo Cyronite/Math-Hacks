@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
+// The smoothing factor. 0.1 = heavy/smooth, 0.9 = fast/twitchy
+const LERP_FACTOR = 0.1;
+
 interface HandTrackerProps {
   onYChange: (y: number) => void;
 }
@@ -9,6 +12,9 @@ const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [landmarker, setLandmarker] = useState<HandLandmarker | null>(null);
   const [isTracking, setIsTracking] = useState(false);
+  
+  // Store the previous Y position so we can smooth between frames
+  const lastY = useRef<number>(0.5);
 
   useEffect(() => {
     const setupLandmarker = async () => {
@@ -17,11 +23,11 @@ const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
       );
       const handLandmarker = await HandLandmarker.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: "/hand_landmarker.task", 
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
           delegate: "GPU",
         },
         runningMode: "VIDEO",
-        numHands: 1, // Changed to 1 so it focuses on your conducting hand
+        numHands: 1,
       });
       setLandmarker(handLandmarker);
     };
@@ -44,8 +50,13 @@ const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
       const results = landmarker.detectForVideo(videoRef.current, startTimeMs);
       
       if (results.landmarks.length > 0) { 
-        const indexTipY = results.landmarks[0][8].y; // Y position of the index fingertip
-        onYChange(indexTipY);
+        const rawY = results.landmarks[0][8].y; 
+
+        // LERPING  -> New = Old + (Target - Old) * Speed [smoothing hand coordinates]
+        const smoothedY = lastY.current + (rawY - lastY.current) * LERP_FACTOR;
+        lastY.current = smoothedY;
+
+        onYChange(smoothedY);
       }
     }
     requestAnimationFrame(predict);
@@ -58,7 +69,7 @@ const HandTracker: React.FC<HandTrackerProps> = ({ onYChange }) => {
             ref={videoRef} 
             autoPlay 
             playsInline 
-            className="absolute inset-0 w-full h-full object-cover -scale-x-100" 
+            className="absolute inset-0 w-full h-full object-cover -scale-x-100 opacity-80" 
         />
         {!isTracking && <span className="text-slate-600 font-mono text-xs uppercase tracking-widest z-10">Camera Offline</span>}
       </div>
