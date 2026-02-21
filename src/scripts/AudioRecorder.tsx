@@ -1,202 +1,107 @@
 import React, { useEffect, useRef, useState } from 'react';
+import * as Tone from 'tone';
 
 interface PitchTrackerProps {
-  targetFrequency?: number; // HAND TRACKER GIVES FROM y-coordinate
+  pitchShiftAmount: number; // Comes from HandTracker (-12 to 12) for octa
 }
 
-const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) => {
-  const [pitch, setPitch] = useState<number>(0);
-  const [volume, setVolume] = useState<number>(0);
-  const [isMonitoring, setIsMonitoring] = useState<boolean>(false);
-  const [volumeThreshold, setVolumeThreshold] = useState<number>(0.02); 
-  const [clarity, setClarity] = useState<number>(0);
-
-  // Refs for Audio Nodes and Buffers
-
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const monitorGainRef = useRef<GainNode | null>(null);
-  const filterRef = useRef<BiquadFilterNode | null>(null);
-  const bufRef = useRef<Float32Array>(new Float32Array(new ArrayBuffer(2048 * 4)));
-
-  // YIN Algorithm for Pitch Detection
-
-  const currentPitchYIN = (buffer: Float32Array, sampleRate: number) => {
-    let sum = 0;
-    for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
-    const rms = Math.sqrt(sum / buffer.length);
-    setVolume(rms);
-
-    if (rms < volumeThreshold) return 0;
-
-    const size = buffer.length / 2;
-    const yinBuffer = new Float32Array(size);
-    for (let t = 0; t < size; t++) {
-      for (let i = 0; i < size; i++) {
-        const delta = buffer[i] - buffer[i + t];
-        yinBuffer[t] += delta * delta;
-      }
-    }
-
-    yinBuffer[0] = 1;
-    let runningSum = 0;
-    for (let t = 1; t < size; t++) {
-      runningSum += yinBuffer[t];
-      yinBuffer[t] *= t / runningSum;
-    }
-
-    let tau = -1;
-    for (let t = 1; t < size; t++) {
-      if (yinBuffer[t] < 0.15) {
-        tau = t;
-        break;
-      }
-    }
-
-    if (tau === -1) return 0;
-    setClarity(1 - yinBuffer[tau]);
-    return sampleRate / tau;
-  };
-
-  const update = () => {
-    if (analyserRef.current && audioCtxRef.current) {
-      analyserRef.current.getFloatTimeDomainData(bufRef.current);
-      const freq = currentPitchYIN(bufRef.current, audioCtxRef.current.sampleRate);
-      setPitch(freq > 50 && freq < 1200 ? Math.round(freq) : 0);
-    }
-    requestAnimationFrame(update);
-  };
+const PitchTracker: React.FC<PitchTrackerProps> = ({ pitchShiftAmount }) => {
+  const [isLive, setIsLive] = useState<boolean>(false);
   
+  // Refs to hold our Tone.js nodes
+  const micRef = useRef<Tone.UserMedia | null>(null);
+  const pitchShiftRef = useRef<Tone.PitchShift | null>(null);
 
-  const startMic = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    audioCtxRef.current = ctx;
-    
-    const source = ctx.createMediaStreamSource(stream);
-    
-    // 1. Setup Filter (Cuts off high-end hiss above 2000Hz)
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 2000; 
-    filterRef.current = filter;
+  const startProcessor = async () => {
+    // 1. You MUST call Tone.start() before making any sounds in the browser
+    await Tone.start();
 
-    // 2. Setup Analyser (For Math)
-    analyserRef.current = ctx.createAnalyser();
+    // 2. Create the PitchShifter (WindowSize controls audio quality vs latency)
+    const shifter = new Tone.PitchShift({
+      pitch: 0,
+      windowSize: 0.1, 
+    }).toDestination(); // Route directly to speakers/headphones
     
-    // 3. Setup Monitor Gain (For Playback)
-    const synthGain = ctx.createGain();
-    synthGain.gain.value = 0; // Muted by default
-    monitorGainRef.current = synthGain;
+    pitchShiftRef.current = shifter;
 
-    // --- ROUTING ---
-    // Source -> Analyser (Clean signal for accurate pitch detection)
-    source.connect(analyserRef.current);
-    
-    // Source -> Filter -> Gain -> Destination (Filtered signal for your ears)
-    source.connect(filter);
-    filter.connect(synthGain);
-    synthGain.connect(ctx.destination);
+    // 3. Setup the Microphone
+    const mic = new Tone.UserMedia();
+    micRef.current = mic;
 
-    update();
+    try {
+      await mic.open(); // Asks user for mic permission
+      // Route Microphone -> PitchShifter -> Destination
+      mic.connect(shifter);
+      setIsLive(true);
+    } catch (e) {
+      console.error("Mic access denied or failed", e);
+      alert("Microphone access is required!");
+    }
   };
 
-  // REACT TO HAND MOVEMENT (Frequency changes based on Y-pos)
+  const stopProcessor = () => {
+    if (micRef.current) {
+      micRef.current.close();
+      setIsLive(false);
+    }
+  };
+
+  // Whenever the hand moves, instantly update the Tone.js PitchShifter
   useEffect(() => {
-    if (audioCtxRef.current && filterRef.current) {
-      if (filterRef.current) {
-        filterRef.current.frequency.setTargetAtTime(targetFrequency, audioCtxRef.current.currentTime, 0.05);
-      }
+    if (pitchShiftRef.current && isLive) {
+      // Smoothly ramp the pitch over 0.1 seconds to avoid audio "clicks"
+      pitchShiftRef.current.pitch = pitchShiftAmount;
     }
-  }, [targetFrequency]);
-
-  const toggleMonitor = () => {
-    if (monitorGainRef.current && audioCtxRef.current) {
-      const newStatus = !isMonitoring;
-      setIsMonitoring(newStatus);
-      monitorGainRef.current.gain.setTargetAtTime(newStatus ? 1 : 0, audioCtxRef.current.currentTime, 0.05);
-    }
-  };
+  }, [pitchShiftAmount, isLive]);
 
   return (
-    // REMOVED min-h-screen to let the parent handle the height
     <div className="flex flex-col items-center justify-center w-full h-full text-white p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-[0_0_50px_rgba(34,197,94,0.1)]">
-        <div className="flex justify-between items-center mb-8">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-cyan-500 uppercase tracking-widest">Studio Monitor</span>
-            <span className={`text-[10px] font-bold ${isMonitoring ? 'text-red-400 animate-pulse' : 'text-slate-600'}`}>
-              {isMonitoring ? "● LIVE" : "○ MUTED"}
-            </span>
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-[0_0_50px_rgba(168,85,247,0.1)]">
+        
+        <div className="text-center mb-8">
+          <div className="text-6xl font-mono font-bold tracking-tighter text-white">
+            {pitchShiftAmount > 0 ? "+" : ""}
+            {pitchShiftAmount.toFixed(1)}
           </div>
+          <span className="text-sm font-bold text-slate-500 uppercase tracking-widest">
+            Semitones Shift
+          </span>
+        </div>
+
+        <div className="h-4 w-full bg-slate-800 rounded-full relative overflow-hidden border border-slate-700 mb-8">
+          {/* Visualizer showing where the pitch is currently shifted */}
+          <div 
+            className="absolute h-full w-2 bg-purple-500 shadow-[0_0_15px_purple] transition-all duration-75" 
+            style={{ 
+              // Map -12 to +12 into a 0% to 100% position on the bar
+              left: `${((pitchShiftAmount + 12) / 24) * 100}%`,
+              transform: 'translateX(-50%)' 
+            }}
+          />
+          {/* Center Line marker (0 shift) */}
+          <div className="absolute h-full w-[1px] bg-slate-500 left-1/2 opacity-50" />
+        </div>
+
+        {!isLive ? (
           <button 
-            onClick={toggleMonitor}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isMonitoring ? 'bg-red-500/20 text-red-400 border border-red-500/50' : 'bg-slate-800 text-slate-400'}`}
+            onClick={startProcessor} 
+            className="w-full py-4 bg-purple-600/20 border border-purple-500/50 hover:bg-purple-500 hover:text-black text-purple-400 rounded-2xl font-black uppercase tracking-widest transition-all"
           >
-            {isMonitoring ? "Stop Monitoring" : "Start Monitoring"}
+            Power On Live Auto-Tune
           </button>
-        </div>
-
-        <div className="mb-8">
-          <div className="text-8xl font-mono font-bold tracking-tighter text-white">
-            {pitch > 0 ? pitch : "---"}
-            <span className="text-xl text-slate-700 ml-2">Hz</span>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-col gap-1 mb-8">
-            <div className="flex justify-between text-[10px] font-bold text-cyan-500 uppercase">
-                <span>Hand Goal</span>
-                <span>{Math.round(targetFrequency)} Hz</span>
-            </div>
-            <div className="h-2 w-full bg-slate-800 rounded-full relative overflow-hidden border border-slate-700">
-                {/* This is your voice */}                <div 
-                  className="absolute h-full bg-green-500 transition-all duration-150" 
-                  style={{ width: `${Math.min((pitch / 1000) * 100, 100)}%` }}
-                />
-                {/* This is the hand position "target" */}
-                <div 
-                  className="absolute h-full w-2 bg-white shadow-[0_0_10px_white] z-10 transition-all duration-75" 
-                  style={{ left: `${Math.min((targetFrequency / 1000) * 100, 100)}%` }}
-                />``
-            </div>
-        </div>
-
-        {/* Sensitivity Controls */}
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <div className="flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-              <span>Sensitivity Gate</span>
-              <span>{(volumeThreshold * 100).toFixed(1)}%</span>
-            </div>
-            <input 
-              type="range" min="0" max="0.1" step="0.001" 
-              value={volumeThreshold} 
-              onChange={(e) => setVolumeThreshold(parseFloat(e.target.value))}
-              className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-            />
-          </div>
-
-          <div className="flex items-center gap-4 bg-slate-950/50 p-3 rounded-xl border border-white/5">
-             <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all ${volume > volumeThreshold ? 'bg-green-400' : 'bg-slate-700'}`}
-                  style={{ width: `${Math.min(volume * 500, 100)}%` }}
-                />
-             </div>
-             <span className="text-[10px] font-mono text-slate-500">INPUT</span>
-          </div>
-        </div>
-
-        {!audioCtxRef.current && (
+        ) : (
           <button 
-            onClick={startMic} 
-            className="mt-8 w-full py-4 bg-green-600/20 border border-green-500/50 hover:bg-green-500 hover:text-black text-green-400 rounded-2xl font-black uppercase tracking-widest transition-all"
+            onClick={stopProcessor} 
+            className="w-full py-4 bg-red-600/20 border border-red-500/50 hover:bg-red-500 hover:text-black text-red-400 rounded-2xl font-black uppercase tracking-widest transition-all"
           >
-            Power On Audio Link
+            Kill Power
           </button>
         )}
       </div>
+      
+      <p className="mt-6 text-red-400 text-[10px] uppercase tracking-widest font-bold italic animate-pulse">
+        ⚠️ CRITICAL: You MUST use headphones or the mic will record the speakers and create a massive feedback loop.
+      </p>
     </div>
   );
 };
