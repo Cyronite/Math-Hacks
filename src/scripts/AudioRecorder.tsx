@@ -2,16 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as Tone from 'tone';
 import { PitchDetector } from "pitchy";
 
-interface PitchTrackerProps {
-  yPosition?: number;
-}
+interface PitchTrackerProps { yPosition?: number; }
 
-// 1. STATISTICAL DATA: Song Timeline
+// 1. DATA: Note and Lyrics Timeline
 const SONG_TIMELINE = [
-  { start: 0, end: 4, lyrics: "DATA POINTS FALLING" },
-  { start: 4, end: 8, lyrics: "STOCHASTIC RESONANCE" },
-  { start: 8, end: 12, lyrics: "PROBABLY ON KEY" },
-  { start: 12, end: 16, lyrics: "MEAN REVERSION" },
+  { start: 0, end: 4, note: "C4", lyrics: "DATA POINTS FALLING" },
+  { start: 4, end: 8, note: "G4", lyrics: "STOCHASTIC RESONANCE" },
+  { start: 8, end: 12, note: "A4", lyrics: "PROBABLY ON KEY" },
+  { start: 12, end: 16, note: "G4", lyrics: "MEAN REVERSION" },
 ];
 
 const NOTE_TO_FREQ: Record<string, number> = {
@@ -19,24 +17,20 @@ const NOTE_TO_FREQ: Record<string, number> = {
   "D": 293.66, "Middle C": 261.63, "Low A": 220.00, "Low G": 196.00,
 };
 
-const SCALE = [
-  { label: "High C" }, { label: "A" }, { label: "G" }, { label: "E" },
-  { label: "D" }, { label: "Middle C" }, { label: "Low A" }, { label: "Low G" },
-];
+const SCALE = [{ label: "High C" }, { label: "A" }, { label: "G" }, { label: "E" }, { label: "D" }, { label: "Middle C" }, { label: "Low A" }, { label: "Low G" }];
 
 const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   const [isLive, setIsLive] = useState(false);
-  const [currentLyric, setCurrentLyric] = useState("ANALYZING...");
+  const [currentLyric, setCurrentLyric] = useState("PRESS START");
   const [activeNote, setActiveNote] = useState(SCALE[5]);
-  const [confidence, setConfidence] = useState(0); // P(Success)
+  const [confidence, setConfidence] = useState(0);
 
   const micRef = useRef<Tone.UserMedia | null>(null);
   const pitchShiftRef = useRef<Tone.PitchShift | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
+  const synthRef = useRef<Tone.PolySynth | null>(null); // TO HEAR THE SONG
   const detectorRef = useRef<PitchDetector<Float32Array> | null>(null);
   const animationFrameRef = useRef<number>();
 
-  // SYNC HAND TO UI
   useEffect(() => {
     const invertedY = 1 - (yPosition || 0.5);
     let index = Math.floor(invertedY * SCALE.length);
@@ -45,106 +39,103 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   }, [yPosition]);
 
   const startPerformance = async () => {
-    await Tone.start();
-    const audioContext = Tone.getContext().rawContext as AudioContext;
-    
-    // Setup Stochastic Processor
-    const shifter = new Tone.PitchShift({ pitch: 0, windowSize: 0.04 }).toDestination();
-    pitchShiftRef.current = shifter;
+    try {
+      // FORCE AUDIO CONTEXT START
+      await Tone.start();
+      console.log("Audio Context Started");
 
-    const mic = new Tone.UserMedia();
-    const analyser = audioContext.createAnalyser();
-    analyserRef.current = analyser;
-    
-    await mic.open();
-    mic.connect(analyser);
-    analyser.connect(shifter);
-    
-    detectorRef.current = PitchDetector.forFloat32Array(analyser.fftSize);
-    micRef.current = mic;
+      const audioContext = Tone.getContext().rawContext as AudioContext;
+      
+      // 1. Modified Voice Path
+      const shifter = new Tone.PitchShift({ pitch: 0, windowSize: 0.05 }).toDestination();
+      pitchShiftRef.current = shifter;
 
-    Tone.Transport.start();
-    setIsLive(true);
-    tick();
+      // 2. Song Playback Synth (So you hear the guide)
+      const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+      synth.set({ volume: -12, oscillator: { type: "triangle" } });
+      synthRef.current = synth;
+
+      // 3. Mic Input
+      const mic = new Tone.UserMedia();
+      const analyser = audioContext.createAnalyser();
+      
+      await mic.open();
+      mic.connect(analyser);
+      analyser.connect(shifter); // Your shifted voice goes to speakers
+      
+      detectorRef.current = PitchDetector.forFloat32Array(analyser.fftSize);
+      micRef.current = mic;
+
+      // Reset and Start Clock
+      Tone.Transport.cancel();
+      Tone.Transport.seconds = 0;
+      Tone.Transport.start();
+      
+      setIsLive(true);
+      tick();
+    } catch (err) {
+      console.error("Start Error:", err);
+    }
   };
 
   const tick = () => {
-    if (!detectorRef.current || !analyserRef.current) return;
+    if (!detectorRef.current || !pitchShiftRef.current) return;
 
-    // 1. STATISTICAL CLOCK: Update Lyrics
     const time = Tone.Transport.seconds % 16; 
     const section = SONG_TIMELINE.find(s => time >= s.start && time < s.end);
-    if (section) setCurrentLyric(section.lyrics);
 
-    // 2. PROBABILITY ANALYSIS: Detect Pitch
-    const inputBuffer = new Float32Array(detectorRef.current!.inputLength);
-    analyserRef.current.getFloatTimeDomainData(inputBuffer);
-    const [pitch, clarity] = detectorRef.current.findPitch(inputBuffer, (Tone.getContext().rawContext as AudioContext).sampleRate);
+    if (section) {
+      if (currentLyric !== section.lyrics) {
+        setCurrentLyric(section.lyrics);
+        // Play the guide note so you hear it in headphones
+        synthRef.current?.triggerAttackRelease(section.note, "4n");
+      }
 
-    setConfidence(Math.round(clarity * 100));
-
-    // 3. CORRECTION: Only if P(Correct) > 80%
-    if (pitch > 0 && clarity > 0.8) {
-      const targetFreq = NOTE_TO_FREQ[activeNote.label];
-      const targetShift = 12 * Math.log2(targetFreq / pitch);
+      // GET MIC DATA
+      const inputBuffer = new Float32Array(detectorRef.current!.inputLength);
+      const audioContext = Tone.getContext().rawContext as AudioContext;
+      const analyser = (micRef.current as any)._node.context.createAnalyser(); // Safety fallback
       
-      const currentShift = pitchShiftRef.current!.pitch;
-      pitchShiftRef.current!.pitch = currentShift + (targetShift - currentShift) * 0.15;
+      // Pitch Detection & Correction
+      const [pitch, clarity] = detectorRef.current.findPitch(inputBuffer, audioContext.sampleRate);
+      setConfidence(Math.round(clarity * 100));
+
+      if (pitch > 0 && clarity > 0.8) {
+        const targetFreq = NOTE_TO_FREQ[activeNote.label];
+        const targetShift = 12 * Math.log2(targetFreq / pitch);
+        pitchShiftRef.current.pitch += (targetShift - pitchShiftRef.current.pitch) * 0.15;
+      }
     }
 
     animationFrameRef.current = requestAnimationFrame(tick);
   };
 
-  const stopProcessor = () => {
-    micRef.current?.close();
-    setIsLive(false);
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-  };
-
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full bg-slate-900/50 rounded-3xl p-8 border border-cyan-500/20 shadow-2xl backdrop-blur-md">
-      <div className="mb-8 text-center">
-        <h1 className="text-[10px] tracking-[.4em] text-cyan-400 font-bold mb-4 uppercase opacity-60">Probabilistic Vocal Engine</h1>
-        <div className="text-4xl font-black text-white italic tracking-tighter h-12 leading-none uppercase">{currentLyric}</div>
+    <div className="flex flex-col items-center justify-center w-full h-full bg-slate-900 border-2 border-cyan-500 rounded-3xl p-8 shadow-[0_0_30px_rgba(6,182,212,0.3)]">
+      <div className="text-center mb-6">
+        <h2 className="text-cyan-400 font-mono text-[10px] tracking-widest mb-2">STOCHASTIC_VOCAL_LINK</h2>
+        <div className="text-3xl font-black text-white italic h-10">{currentLyric}</div>
       </div>
 
-      {/* P(Success) Meter */}
-      <div className="w-full mb-8 space-y-2">
-        <div className="flex justify-between text-[10px] font-mono text-cyan-400/70">
-          <span>STATISTICAL_CONFIDENCE</span>
-          <span>{confidence}%</span>
-        </div>
-        <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-75" 
-            style={{ width: `${confidence}%` }}
-          ></div>
-        </div>
+      <div className="w-full h-2 bg-slate-800 rounded-full mb-8 overflow-hidden">
+        <div className="h-full bg-cyan-500 transition-all duration-75" style={{ width: `${confidence}%` }}></div>
       </div>
 
-      {/* Hand Tracker Note Display */}
-      <div className="w-full bg-black/40 p-6 rounded-2xl border border-white/5 mb-8 relative overflow-hidden">
-        <div className="flex justify-between items-end h-12 gap-1.5">
-          {SCALE.map((n) => (
-            <div 
-              key={n.label}
-              className={`flex-1 transition-all duration-500 rounded-sm ${n.label === activeNote.label ? 'bg-cyan-500 h-full shadow-[0_0_20px_rgba(6,182,212,0.6)]' : 'bg-white/10 h-1/4'}`}
-            />
-          ))}
+      <div className="w-full bg-black/50 p-6 rounded-xl border border-white/10 mb-8">
+        <div className="flex items-end justify-between h-12 gap-1">
+            {SCALE.map(s => (
+                <div key={s.label} className={`flex-1 ${s.label === activeNote.label ? 'bg-cyan-500 h-full' : 'bg-white/5 h-1/4'}`} />
+            ))}
         </div>
-        <div className="mt-4 text-center font-mono text-[10px] text-cyan-400 uppercase tracking-widest">
-            Hand Target: {activeNote.label}
-        </div>
+        <p className="text-center mt-4 font-mono text-xs text-cyan-400">HAND POSITION: {activeNote.label}</p>
       </div>
 
       {!isLive ? (
-        <button onClick={startPerformance} className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white font-black rounded-xl transition-all shadow-lg shadow-cyan-900/20">
-          START ANALYSIS
+        <button onClick={startPerformance} className="w-full py-4 bg-cyan-600 text-white font-black rounded-xl animate-pulse">
+          INITIALIZE ANALYSIS
         </button>
       ) : (
-        <button onClick={stopProcessor} className="w-full py-4 bg-red-900/20 border border-red-500/50 text-red-500 font-black rounded-xl">
-          STOP
-        </button>
+        <div className="text-red-500 font-bold text-xs tracking-tighter">PROCESSING STREAMS...</div>
       )}
     </div>
   );
