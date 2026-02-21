@@ -2,10 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as Tone from 'tone';
 
 interface PitchTrackerProps {
-  yPosition: number; // Expects 0 (top) to 1 (bottom)
+  yPosition?: number;
 }
 
-// C Major Pentatonic Scale
 const SCALE = [
   { val: 12, label: "High C" },
   { val: 9, label: "A" },
@@ -20,37 +19,33 @@ const SCALE = [
   { val: -12, label: "Low C" },
 ];
 
-const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition }) => {
+const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   const [isLive, setIsLive] = useState<boolean>(false);
-  const [activeNote, setActiveNote] = useState(SCALE[5]); // Default Middle C
+  const [activeNote, setActiveNote] = useState(SCALE[5]); 
   
   const micRef = useRef<Tone.UserMedia | null>(null);
   const pitchShiftRef = useRef<Tone.PitchShift | null>(null);
 
   const startProcessor = async () => {
-    // 1. Initialize Tone Context
-    await Tone.start();
-
-    // 2. Create PitchShift ONLY (No Reverb)
-    const shifter = new Tone.PitchShift({
-      pitch: 0,
-      windowSize: 0.05, // Small window = robotic/fast, Large = smooth/sluggish
-    }).toDestination(); 
-    
-    pitchShiftRef.current = shifter;
-
-    // 3. Open Mic
-    const mic = new Tone.UserMedia();
-    micRef.current = mic;
-
     try {
+      await Tone.start();
+      
+      const shifter = new Tone.PitchShift({
+        pitch: 0,
+        windowSize: 0.05, 
+      }).toDestination(); 
+      
+      pitchShiftRef.current = shifter;
+
+      const mic = new Tone.UserMedia();
+      micRef.current = mic;
+
       await mic.open();
-      // 4. Connect Mic -> Shifter -> Speakers
       mic.connect(shifter);
       setIsLive(true);
     } catch (e) {
-      console.error(e);
-      alert("Microphone access is required!");
+      console.error("Audio Start Error:", e);
+      alert("Could not start audio. Check microphone permissions.");
     }
   };
 
@@ -64,25 +59,29 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition }) => {
   useEffect(() => {
     if (!pitchShiftRef.current || !isLive) return;
 
-    // --- QUANTIZATION LOGIC ---
-    
-    // 1. Invert Y (Hand Top = 0 = High Note)
-    const invertedY = 1 - yPosition;
+    // SAFETY CHECK: Ensure yPosition is a real number. If not, default to 0.5
+    const safeY = isNaN(yPosition) ? 0.5 : yPosition;
+
+    // 1. Invert Y 
+    const invertedY = 1 - safeY;
 
     // 2. Map 0-1 to Scale Index
     let index = Math.floor(invertedY * SCALE.length);
     
-    // Safety check to prevent crashing if index is out of bounds
+    // SAFETY CHECK: Clamp index to bounds
     if (index < 0) index = 0;
     if (index >= SCALE.length) index = SCALE.length - 1;
 
     const targetNote = SCALE[index];
 
-    // 3. Apply Pitch
-    setActiveNote(targetNote);
-    pitchShiftRef.current.pitch = targetNote.val;
+    if (targetNote) {
+      setActiveNote(targetNote);
+      pitchShiftRef.current.pitch = targetNote.val;
+    }
 
   }, [yPosition, isLive]);
+
+  if (!activeNote) return <div className="text-white">Loading Scale...</div>;
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full text-white p-4">
@@ -100,7 +99,6 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition }) => {
           </span>
         </div>
 
-        {/* Quantized Visualizer */}
         <div className="h-48 w-full bg-slate-800/50 rounded-xl relative overflow-hidden border border-slate-700 mb-8 flex flex-col-reverse">
           {SCALE.map((note) => (
              <div 
