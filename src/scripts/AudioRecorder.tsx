@@ -80,7 +80,7 @@ const PitchTracker: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
             // @ts-ignore - Ignores the TS error, but we catch runtime errors below
             if (pitchSignal.rampTo) {
                  // @ts-ignore
-                pitchSignal.rampTo(targetNote.val, 0.1);
+                pitchSignal.rampTo(targetNote.val, 0.01);
             } else {
                 // Fallback: If rampTo doesn't exist, just set the value
                 pitchShiftRef.current.pitch = targetNote.val;
