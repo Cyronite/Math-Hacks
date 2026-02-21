@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 // The smoothing factor. 0.1 = heavy/smooth, 0.9 = fast/twitchy
-const LERP_FACTOR = 0.1;
+const LERP_FACTOR = 0.06;
 
 interface HandTrackerProps {
   onYChange: (y: number) => void;
