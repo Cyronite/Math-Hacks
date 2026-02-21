@@ -62,7 +62,7 @@ const PitchGame: React.FC = () => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
-    osc.type = 'triangle'; // Triangle waves are easier for the human ear to pitch-match than pure sine waves apparently...
+    osc.type = 'triangle'; 
     osc.frequency.value = hz;
     
     osc.connect(gain);
@@ -134,25 +134,21 @@ const PitchGame: React.FC = () => {
     const hz = autoCorrelate(buffer, audioCtxRef.current.sampleRate);
 
     if (hz > -1) {
-      setCurrentHz(hz); // Show their actual raw pitch on screen
+      setCurrentHz(hz);
 
-      // Octave Folding: Shift their pitch to match the target's octave
       let adjustedHz = hz;
-      const lowerBound = targetNote.hz * 0.707; // Half an octave down
-      const upperBound = targetNote.hz * 1.414; // Half an octave up
+      const lowerBound = targetNote.hz * 0.707; 
+      const upperBound = targetNote.hz * 1.414; 
 
       while (adjustedHz < lowerBound) adjustedHz *= 2;
       while (adjustedHz > upperBound) adjustedHz /= 2;
 
-      // 100 cents = exactly 1 piano key (semitone) away
       const centsOff = Math.abs(1200 * Math.log2(adjustedHz / targetNote.hz));
 
       let calculatedScore = 0;
       if (centsOff <= 15) {
-        // Give them a 15-cent "perfect" window. Singers naturally waver slightly!
         calculatedScore = 100;
       } else if (centsOff < 100) {
-        // Map the remaining 15-100 cents to a 0-100 score
         calculatedScore = Math.max(0, 100 - (centsOff - 15));
       }
 
@@ -168,7 +164,6 @@ const PitchGame: React.FC = () => {
 
   const endRound = () => {
     setGameState('result');
-    // We ONLY stop the loop. We do NOT suspend the audio context
     cancelAnimationFrame(reqFrameRef.current);
   };
 
@@ -177,82 +172,81 @@ const PitchGame: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center w-full h-full text-white p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-[0_0_50px_rgba(34,197,94,0.1)] text-center relative overflow-hidden">
+    <div className="flex flex-col items-center">
+      <div className="w-full max-w-md bg-white rounded-[40px] p-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] border border-slate-50 relative overflow-hidden text-center">
         
+        {/* TIMER BAR */}
         {gameState === 'playing' && (
-            <div className="absolute top-0 left-0 right-0 h-1 bg-slate-800">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-slate-50">
                 <div 
-                    className="h-full bg-green-500 transition-all duration-1000 ease-linear" 
+                    className="h-full bg-emerald-400 transition-all duration-1000 ease-linear" 
                     style={{ width: `${(timeLeft / 10) * 100}%` }}
                 />
             </div>
         )}
 
-        <h2 className="text-xl font-black text-green-400 uppercase tracking-widest mb-2 mt-2">
-            Pitch Match
-        </h2>
-        
         {gameState === 'result' ? (
-            <div className="my-12">
-                <p className="text-slate-400 text-sm uppercase tracking-widest mb-4">Final Accuracy</p>
-                <div className={`text-8xl font-black mb-4 ${bestScore >= 90 ? 'text-green-400' : bestScore >= 70 ? 'text-yellow-400' : 'text-red-400'}`}>
+            <div className="my-16">
+                <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-[0.2em] mb-4">Final Accuracy</p>
+                <div className="text-8xl font-light text-slate-700 mb-6">
                     {bestScore}%
                 </div>
-                <p className="text-slate-500 text-sm font-mono">
-                    Target was {targetNote.label} ({targetNote.hz.toFixed(1)} Hz)
+                <p className="text-xs text-slate-400 uppercase tracking-widest">
+                    Target: {targetNote.label} <span className="text-[10px] block mt-2 text-slate-300">({targetNote.hz.toFixed(1)} Hz)</span>
                 </p>
             </div>
         ) : (
             <>
-                <p className="text-slate-400 text-xs mb-8">
-                    {gameState === 'playing' ? `Time remaining: ${timeLeft}s` : "Sing the note shown below."}
+                <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-[0.2em] mb-8">
+                    {gameState === 'playing' ? `${timeLeft} Seconds Left` : "Ear Training"}
                 </p>
 
-                <div className="mb-4">
-                    <span className="text-sm text-slate-500 uppercase font-bold tracking-widest">Target Note</span>
-                    <div className="text-6xl font-mono font-black text-white my-2">{targetNote.label}</div>
-                    <div className="text-sm text-green-500/80 font-mono mb-4">Target: {targetNote.hz.toFixed(1)} Hz</div>
+                <div className="mb-8">
+                    <div className="text-7xl font-light text-slate-700 mb-2">{targetNote.label}</div>
+                    <div className="text-xs text-slate-400 uppercase tracking-widest mb-6">{targetNote.hz.toFixed(1)} Hz</div>
                     
-                    {/* NEW PLAY REFERENCE BUTTON */}
                     {gameState === 'playing' && (
                         <button 
                             onClick={() => playReferencePitch(targetNote.hz)}
-                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors mb-4 border border-slate-700 hover:border-slate-500"
+                            className="px-6 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-full text-[10px] font-bold uppercase tracking-widest transition-colors border border-slate-100"
                         >
-                            🔊 Hear Pitch
+                            Play Reference Pitch
                         </button>
                     )}
                 </div>
 
-                <div className="h-32 w-full bg-slate-800/50 rounded-xl border border-slate-700 mb-8 flex flex-col items-center justify-center relative overflow-hidden">
+                {/* VISUALIZER BOX */}
+                <div className="h-40 w-full bg-slate-50 rounded-3xl border border-slate-100 mb-10 flex flex-col items-center justify-center relative overflow-hidden">
                     <div 
-                        className="absolute bottom-0 left-0 right-0 bg-green-500/20 transition-all duration-100 ease-out"
+                        className="absolute bottom-0 left-0 right-0 bg-emerald-100 transition-all duration-100 ease-out"
                         style={{ height: `${score}%` }}
                     />
                     
-                    <span className="text-sm text-slate-400 uppercase tracking-widest relative z-10">Current Pitch</span>
-                    <div className={`text-4xl font-mono font-bold relative z-10 transition-colors ${score > 90 ? 'text-green-400' : 'text-white'}`}>
-                        {currentHz > 0 ? `${currentHz.toFixed(1)} Hz` : "--- Hz"}
+                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest relative z-10 mb-2">Live Pitch</span>
+                    <div className="text-4xl font-light text-slate-700 relative z-10">
+                        {currentHz > 0 ? `${currentHz.toFixed(1)} Hz` : "---"}
                     </div>
-                    <div className="text-sm font-black text-white mt-2 relative z-10">
-                        Accuracy: {score}% <span className="text-green-400 ml-2">(Best: {bestScore}%)</span>
-                    </div>
+                    {currentHz > 0 && (
+                        <div className="text-[10px] font-bold text-emerald-600 mt-2 relative z-10 uppercase tracking-widest">
+                            Match: {score}%
+                        </div>
+                    )}
                 </div>
             </>
         )}
 
+        {/* BUTTONS */}
         {gameState === 'idle' || gameState === 'result' ? (
           <button 
             onClick={startRound} 
-            className="w-full py-4 bg-green-600/20 border border-green-500/50 hover:bg-green-500 hover:text-black text-green-400 rounded-2xl font-black uppercase tracking-widest transition-all"
+            className="w-full py-5 bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 rounded-2xl text-[11px] font-bold uppercase tracking-[0.4em] transition-all"
           >
-            {gameState === 'result' ? 'Play Again' : 'Start Round'}
+            {gameState === 'result' ? 'Train Again' : 'Begin Exercise'}
           </button>
         ) : (
           <button 
             onClick={endRound} 
-            className="w-full py-4 bg-red-600/20 border border-red-500/50 hover:bg-red-500 hover:text-black text-red-400 rounded-2xl font-black uppercase tracking-widest transition-all"
+            className="w-full py-5 bg-rose-50 text-rose-500 border border-rose-100 hover:bg-rose-100 rounded-2xl text-[11px] font-bold uppercase tracking-[0.4em] transition-all"
           >
             End Early
           </button>

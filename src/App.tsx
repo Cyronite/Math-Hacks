@@ -2,66 +2,78 @@ import { useState } from 'react';
 import './App.css';
 import AudioRecorder from './scripts/AudioRecorder';
 import HandTracker from './scripts/HandTracker';
+import KeyboardTracker from './scripts/KeyboardTracker';
 import PitchGame from './scripts/PitchGame';
 
 function App() {
   const [yPos, setYPos] = useState<number>(0.5);
   const [mode, setMode] = useState<'synth' | 'game'>('synth');
+  const [inputMode, setInputMode] = useState<'camera' | 'keyboard'>('keyboard'); 
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row items-center justify-center bg-gray-950 text-white overflow-hidden">
+    <div className="min-h-screen bg-[#FDFCFB] text-slate-700 font-sans selection:bg-orange-100">
       
-      {/* MODE SELECTOR OVERLAY */}
-      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-50 flex gap-4 bg-slate-900/80 p-2 rounded-2xl border border-slate-800 backdrop-blur-md">
-        <button 
-            onClick={() => setMode('synth')}
-            className={`px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${mode === 'synth' ? 'bg-purple-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'text-slate-400 hover:text-white'}`}
-        >
-            Synthesizer
-        </button>
-        <button 
-            onClick={() => setMode('game')}
-            className={`px-6 py-2 rounded-xl font-bold text-xs uppercase tracking-widest transition-all ${mode === 'game' ? 'bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.4)]' : 'text-slate-400 hover:text-white'}`}
-        >
-            Pitch Game
-        </button>
-      </div>
-
-      {/* LEFT SIDE: Camera */}
-      <div className="w-full md:w-1/2 h-screen p-8 border-r border-slate-800 flex flex-col items-center justify-center relative bg-black/20">
-        <div className="absolute top-8 left-8 flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-            <h2 className="text-[10px] font-black text-cyan-500 uppercase tracking-widest">Conductor Input</h2>
+      {/* ELEGANT TOP NAVIGATION */}
+      <header className="fixed top-0 w-full z-50 px-8 py-6 flex justify-between items-center backdrop-blur-md bg-white/60 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+            <div className="w-6 h-6 bg-gradient-to-tr from-orange-300 to-rose-300 rounded-full shadow-sm" />
+            <h1 className="text-sm font-light tracking-[0.2em] uppercase text-slate-700"><span className="font-bold">Voca</span></h1>
         </div>
+
+        <nav className="flex gap-8">
+            <button 
+                onClick={() => setMode('synth')}
+                className={`text-[10px] uppercase tracking-[0.3em] transition-all pb-1 ${mode === 'synth' ? 'text-orange-500 font-bold border-b-2 border-orange-300' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                Synthesizer
+            </button>
+            <button 
+                onClick={() => setMode('game')}
+                className={`text-[10px] uppercase tracking-[0.3em] transition-all pb-1 ${mode === 'game' ? 'text-emerald-500 font-bold border-b-2 border-emerald-300' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+                Training
+            </button>
+        </nav>
+      </header>
+
+      <main className="pt-24 flex flex-col md:flex-row h-screen overflow-hidden">
         
-        {/* Only show the camera feed if we are in Synth Mode (since Game Mode doesn't use the hand) */}
-        {mode === 'synth' ? (
-             <HandTracker onYChange={setYPos} />
-        ) : (
-            <div className="text-slate-500 text-sm font-mono text-center">
-                <p>Camera offline.</p>
-                <p>Use your voice directly for the Pitch Game.</p>
+        {/* LEFT: CONDUCTOR SPACE */}
+        <section className="w-full md:w-1/2 p-12 flex flex-col justify-center items-center relative">
+            {mode === 'synth' && (
+                <div className="absolute top-12 flex bg-slate-100 p-1 rounded-full shadow-inner">
+                    {['keyboard', 'camera'].map((m) => (
+                        <button
+                            key={m}
+                            onClick={() => setInputMode(m as any)}
+                            className={`px-6 py-2 rounded-full text-[9px] uppercase tracking-widest transition-all ${inputMode === m ? 'bg-white text-slate-700 shadow-sm font-bold' : 'text-slate-400 hover:text-slate-500'}`}
+                        >
+                            {m}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            <div className="w-full max-w-lg transition-all duration-1000">
+                {mode === 'synth' ? (
+                    inputMode === 'camera' ? <HandTracker onYChange={setYPos} /> : <KeyboardTracker onYChange={setYPos} />
+                ) : (
+                    <div className="text-center space-y-4">
+                        <h3 className="text-3xl font-light text-slate-400 italic">Warm up your voice.</h3>
+                        <p className="text-xs text-slate-400 uppercase tracking-widest">No hands required for training mode.</p>
+                    </div>
+                )}
             </div>
-        )}
-      </div>
+        </section>
 
-      {/* RIGHT SIDE: Audio Processing or Game */}
-      <div className="w-full md:w-1/2 h-screen p-8 flex flex-col items-center justify-center relative">
-        <div className="absolute top-8 left-8 flex items-center gap-3">
-            <span className={`w-2 h-2 rounded-full animate-pulse ${mode === 'synth' ? 'bg-purple-500' : 'bg-green-500'}`}></span>
-            <h2 className={`text-[10px] font-black uppercase tracking-widest ${mode === 'synth' ? 'text-purple-500' : 'text-green-500'}`}>
-                {mode === 'synth' ? 'Vocal Processor' : 'Pitch Analysis'}
-            </h2>
-        </div>
-        
-        {/* Toggle between the components based on the state */}
-        {mode === 'synth' ? (
-            <AudioRecorder yPosition={yPos} />
-        ) : (
-            <PitchGame />
-        )}
-      </div>
+        {/* RIGHT: OUTPUT SPACE */}
+        <section className="w-full md:w-1/2 p-12 bg-[#F8F7F5] flex flex-col justify-center items-center border-l border-slate-100">
+            <div className="w-full max-w-md transition-all duration-1000">
+                {mode === 'synth' ? <AudioRecorder yPosition={yPos} /> : <PitchGame />}
+            </div>
+        </section>
 
+      </main>
     </div>
   );
 }
