@@ -1,10 +1,10 @@
 import './App.css'
-
+import HandTracker from './scripts/HandTracker'
 function App() {
 
   return (
     <>
-     <h1 className='text-xl'>yo wassup</h1>
+      <HandTracker />
     </>
   )
 }
