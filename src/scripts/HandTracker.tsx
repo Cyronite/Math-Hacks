@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
-const LERP_FACTOR = 0.06;
+const LERP_FACTOR = 0.5;
 
 interface HandTrackerProps {
   onYChange: (y: number) => void;

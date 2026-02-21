@@ -123,9 +123,29 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
 
     const targetNote = SCALE[index];
     if (targetNote.val !== activeNote.val) {
-      setActiveNote(targetNote);
+        setActiveNote(targetNote);
+        
+        const pitchSignal = pitchShiftRef.current.pitch;
+
+        try {
+            // @ts-ignore - Ignores the TS error, but we catch runtime errors below
+            if (pitchSignal.rampTo) {
+                 // @ts-ignore
+                pitchSignal.rampTo(targetNote.val, 0.01);
+            } else {
+                // Fallback: If rampTo doesn't exist, just set the value
+                pitchShiftRef.current.pitch = targetNote.val;
+            }
+        } catch (e) {
+            // if worst case, force the value so app doesn't crash
+            console.warn("Smoothing failed, snapping pitch instead.");
+            pitchShiftRef.current.pitch = targetNote.val;
+        }
     }
-  }, [yPosition, activeNote.val]);
+
+  }, [yPosition, isLive, activeNote]);
+
+  if (!activeNote) return <div className="text-white">Loading Scale...</div>;
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full text-white p-4">
