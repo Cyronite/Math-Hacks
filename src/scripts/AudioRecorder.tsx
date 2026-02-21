@@ -1,17 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const PitchTracker: React.FC = () => {
+interface PitchTrackerProps {
+  targetFrequency?: number; // HAND TRACKER GIVES FROM y-coordinate
+}
+
+const PitchTracker: React.FC<PitchTrackerProps> = ({ targetFrequency = 440 }) => {
   const [pitch, setPitch] = useState<number>(0);
   const [volume, setVolume] = useState<number>(0);
   const [isMonitoring, setIsMonitoring] = useState<boolean>(false);
-  const [volumeThreshold, setVolumeThreshold] = useState<number>(0.02);
+  const [volumeThreshold, setVolumeThreshold] = useState<number>(0.02); 
   const [clarity, setClarity] = useState<number>(0);
+
+  // Refs for Audio Nodes and Buffers
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const monitorGainRef = useRef<GainNode | null>(null);
   const filterRef = useRef<BiquadFilterNode | null>(null);
-  const bufRef = useRef<Float32Array>(new Float32Array(2048));
+  const bufRef = useRef<Float32Array>(new Float32Array(new ArrayBuffer(2048 * 4)));
+
+  // YIN Algorithm for Pitch Detection
 
   const currentPitchYIN = (buffer: Float32Array, sampleRate: number) => {
     let sum = 0;
@@ -58,6 +66,7 @@ const PitchTracker: React.FC = () => {
     }
     requestAnimationFrame(update);
   };
+  
 
   const startMic = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -76,9 +85,9 @@ const PitchTracker: React.FC = () => {
     analyserRef.current = ctx.createAnalyser();
     
     // 3. Setup Monitor Gain (For Playback)
-    const gain = ctx.createGain();
-    gain.gain.value = 0; 
-    monitorGainRef.current = gain;
+    const synthGain = ctx.createGain();
+    synthGain.gain.value = 0; // Muted by default
+    monitorGainRef.current = synthGain;
 
     // --- ROUTING ---
     // Source -> Analyser (Clean signal for accurate pitch detection)
@@ -86,11 +95,32 @@ const PitchTracker: React.FC = () => {
     
     // Source -> Filter -> Gain -> Destination (Filtered signal for your ears)
     source.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
+    filter.connect(synthGain);
+    synthGain.connect(ctx.destination);
 
     update();
   };
+
+  // REACT TO HAND MOVEMENT (Frequency changes based on Y-pos)
+  useEffect(() => {
+    if (audioCtxRef.current && filterRef.current) {
+      const updateFrequency = (y: number) => {
+        const freq = 100 + (y / window.innerHeight) * 1000;
+        filterRef.current!.frequency.value = freq;
+      };
+
+      const handleMouseMove = (e: MouseEvent) => updateFrequency(e.clientY);
+      const handleTouchMove = (e: TouchEvent) => updateFrequency(e.touches[0].clientY);
+
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('touchmove', handleTouchMove);
+
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('touchmove', handleTouchMove);
+      };
+    }
+  }, []);
 
   const toggleMonitor = () => {
     if (monitorGainRef.current && audioCtxRef.current) {
