@@ -6,7 +6,7 @@ interface PitchTrackerProps {
   yPosition?: number;
 }
 
-// Map the labels to actual frequencies (Hz)
+// Frequency Map for Correction
 const NOTE_TO_FREQ: Record<string, number> = {
   "High C": 523.25,
   "A": 440.00,
@@ -45,19 +45,20 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   const detectorRef = useRef<PitchDetector<Float32Array> | null>(null);
   const animationFrameRef = useRef<number>();
 
+  // --- START PROCESSOR ---
   const startProcessor = async () => {
     try {
       await Tone.start();
       const audioContext = Tone.getContext().rawContext as AudioContext;
 
-      // 1. Setup Shifter - Smaller windowSize = less latency
+      // 1. Setup Shifter - Smaller window size = less latency/echo
       const shifter = new Tone.PitchShift({
         pitch: 0,
-        windowSize: 0.05, 
+        windowSize: 0.04, 
       }).toDestination();
       pitchShiftRef.current = shifter;
 
-      // 2. Setup Mic and Analyser for Pitch Detection
+      // 2. Setup Mic and Analyser
       const mic = new Tone.UserMedia();
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
@@ -65,7 +66,7 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
 
       await mic.open();
       
-      // Connection Chain: Mic -> Analyser (for detection) -> Shifter (for output)
+      // Chain: Mic -> Analyser -> PitchShifter -> Output
       mic.connect(analyser);
       analyser.connect(shifter);
       
@@ -76,13 +77,15 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
       beginPitchDetection();
     } catch (e) {
       console.error("Audio Start Error:", e);
-      alert("Microphone access denied or AudioContext failed.");
+      alert("Microphone access denied or AudioContext error.");
     }
   };
 
+  // --- PITCH DETECTION & CORRECTION LOOP ---
   const beginPitchDetection = () => {
     const audioContext = Tone.getContext().rawContext as AudioContext;
     const inputBuffer = new Float32Array(detectorRef.current!.inputLength);
+    const LERP_FACTOR = 0.15; // Controls how fast the "Auto-Tune" snaps to the note
 
     const detect = () => {
       if (!analyserRef.current || !pitchShiftRef.current || !detectorRef.current) return;
@@ -90,14 +93,16 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
       analyserRef.current.getFloatTimeDomainData(inputBuffer);
       const [pitch, clarity] = detectorRef.current.findPitch(inputBuffer, audioContext.sampleRate);
 
-      // Only adjust if the sound is a clear vocal note (clarity > 80%)
-      if (pitch > 0 && clarity > 0.8) {
+      // Only adjust if the user is actually singing a clear note
+      if (pitch > 0 && clarity > 0.85) {
         const targetFreq = NOTE_TO_FREQ[activeNote.label];
-        // The magic formula: calculates semitone distance between sung pitch and target
-        const semitoneDiff = 12 * Math.log2(targetFreq / pitch);
         
-        // Apply correction smoothly
-        pitchShiftRef.current.pitch = semitoneDiff;
+        // Calculate the semitone difference needed to reach the target
+        const targetShift = 12 * Math.log2(targetFreq / pitch);
+        
+        // Smoothly interpolate the current pitch to the target pitch
+        const currentShift = pitchShiftRef.current.pitch;
+        pitchShiftRef.current.pitch = currentShift + (targetShift - currentShift) * LERP_FACTOR;
       }
 
       animationFrameRef.current = requestAnimationFrame(detect);
@@ -109,11 +114,12 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
   const stopProcessor = () => {
     if (micRef.current) {
       micRef.current.close();
-      cancelAnimationFrame(animationFrameRef.current!);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       setIsLive(false);
     }
   };
 
+  // --- SYNC HAND POSITION TO ACTIVE NOTE ---
   useEffect(() => {
     const safeY = isNaN(yPosition as number) ? 0.5 : (yPosition as number);
     const invertedY = 1 - safeY;
@@ -122,45 +128,52 @@ const AudioRecorder: React.FC<PitchTrackerProps> = ({ yPosition = 0.5 }) => {
     if (index >= SCALE.length) index = SCALE.length - 1;
 
     const targetNote = SCALE[index];
-    if (targetNote.val !== activeNote.val) {
+    if (targetNote.label !== activeNote.label) {
       setActiveNote(targetNote);
     }
-  }, [yPosition, activeNote.val]);
+  }, [yPosition, activeNote.label]);
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full text-white p-4">
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-[0_0_50px_rgba(168,85,247,0.1)]">
+        
         <div className="text-center mb-8">
-          <div className="text-4xl font-mono font-bold text-white transition-all">
+          <div className="text-4xl font-mono font-bold text-white transition-all uppercase">
             {activeNote.label}
           </div>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mt-2">
-            Target Frequency: {NOTE_TO_FREQ[activeNote.label]}Hz
-          </span>
+          <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest mt-2">
+            Auto-Tune Active
+          </p>
         </div>
 
         <div className="h-48 w-full bg-slate-800/50 rounded-xl relative overflow-hidden border border-slate-700 mb-8 flex flex-col-reverse">
           {SCALE.map((note) => (
              <div 
-               key={note.val}
+               key={note.label}
                className={`flex-1 w-full border-t border-slate-700/30 transition-all duration-200 flex items-center justify-center
-                 ${note.val === activeNote.val ? "bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.6)] z-10" : "bg-transparent opacity-30"}
+                 ${note.label === activeNote.label ? "bg-purple-600/40 z-10" : "bg-transparent opacity-20"}
                `}
              >
-                <span className={`text-[10px] font-mono ${note.val === activeNote.val ? "text-white font-bold" : "text-slate-600"}`}>
-                    {note.val === activeNote.val ? note.label : ""}
+                <span className={`text-[10px] font-mono ${note.label === activeNote.label ? "text-white font-bold" : "text-slate-600"}`}>
+                    {note.label === activeNote.label ? "TARGET" : ""}
                 </span>
              </div>
           ))}
         </div>
 
         {!isLive ? (
-          <button onClick={startProcessor} className="w-full py-4 bg-purple-600/20 border border-purple-500/50 hover:bg-purple-500 hover:text-black text-purple-400 rounded-2xl font-black uppercase tracking-widest transition-all">
-            Start Live Correction
+          <button 
+            onClick={startProcessor} 
+            className="w-full py-4 bg-purple-600/20 border border-purple-500/50 hover:bg-purple-500 hover:text-black text-purple-400 rounded-2xl font-black uppercase tracking-widest transition-all"
+          >
+            Initialize Vocal Core
           </button>
         ) : (
-          <button onClick={stopProcessor} className="w-full py-4 bg-red-600/20 border border-red-500/50 hover:bg-red-500 hover:text-black text-red-400 rounded-2xl font-black uppercase tracking-widest transition-all">
-            Stop
+          <button 
+            onClick={stopProcessor} 
+            className="w-full py-4 bg-red-600/20 border border-red-500/50 hover:bg-red-500 hover:text-black text-red-400 rounded-2xl font-black uppercase tracking-widest transition-all"
+          >
+            Disable Link
           </button>
         )}
       </div>
